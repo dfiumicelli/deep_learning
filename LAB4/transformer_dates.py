@@ -55,15 +55,15 @@ def scaled_dot_product_attention(q, k, v, mask=None):
         out:     (B, h, Lq, d)   the weighted sums of the values
         weights: (B, h, Lq, Lk)  the attention weights (each row sums to 1)
     """
-    # TODO:
-    #   1. scores = similarity between every query and every key: matrix product of q and k transposed
-    #      (transpose only the last two dimensions: k.transpose(-2, -1)), divided by sqrt(d)
-    #      where d = q.shape[-1]                                              -> (B, h, Lq, Lk)
-    #   2. if mask is not None: put -inf in the masked positions, so that softmax gives them weight 0
-    #      (hint: scores.masked_fill(mask, float("-inf")))
-    #   3. weights = softmax of the scores over the keys (the last dimension)
-    #   4. out = matrix product of the weights and v                         -> (B, h, Lq, d)
-    raise NotImplementedError("TODO 1: implement scaled_dot_product_attention")
+    d = q.shape[-1]
+    scores = torch.matmul(q, k.transpose(-2, -1)) / (d ** 0.5)
+
+    if mask is not None:
+        scores = scores.masked_fill(mask, float("-inf"))
+
+    weights = F.softmax(scores, dim=-1)
+    out = torch.matmul(weights, v)
+    return out, weights
 
 
 # =============================================================================
@@ -141,7 +141,9 @@ class EncoderBlock(nn.Module):
         #   1. self-attention: queries, keys and values all come from x; use src_mask to ignore the padding
         #   2. feed-forward on the result
         # and return x (same shape as the input: (B, Ls, D))
-        raise NotImplementedError("TODO 2: implement EncoderBlock.forward")
+        x = self.norm1(x + self.dropout(self.self_attn(x, x, x, src_mask)))
+        x = self.norm2(x + self.dropout(self.ffn(x)))
+        return x
 
 
 # =============================================================================
@@ -180,7 +182,10 @@ class DecoderBlock(nn.Module):
         #   2. cross-attention: queries from y, keys and values from memory, with src_mask
         #   3. feed-forward on the result
         # and return y (same shape as the input: (B, Lt, D))
-        raise NotImplementedError("TODO 3: implement DecoderBlock.forward")
+        y = self.norm1(y + self.dropout(self.self_attn(y, y, y, tgt_mask)))
+        y = self.norm2(y + self.dropout(self.cross_attn(y, memory, memory, src_mask)))
+        y = self.norm3(y + self.dropout(self.ffn(y)))
+        return y
 
 
 # =============================================================================
