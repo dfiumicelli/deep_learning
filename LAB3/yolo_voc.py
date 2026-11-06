@@ -82,13 +82,36 @@ class YOLONet(nn.Module):
         # Optional: add dropout in the head to reduce overfitting.
         # Optional: add batch normalization in the head.
         # Optional: add a non-linearity (ReLU) after the 1x1 conv and/or in the head.
-        
+        weights = models.ResNet50_Weights.DEFAULT
+        resnet = models.resnet50(weights=weights)
+        self.backbone = nn.Sequential(*list(resnet.children())[:-2])  # drop avgpool and fc
+        # Freeze the pretrained feature extractor so only the YOLO head is trained.
+        for parameter in self.backbone.parameters():
+            parameter.requires_grad = False
 
-        raise NotImplementedError("TODO: implement the network in YOLONet.__init__ and YOLONet.forward")
+        # Force the feature map to the S x S grid expected by the fully connected head.
+        self.pool = nn.AdaptiveAvgPool2d((S, S))
+        self.reduce = nn.Sequential(
+            nn.Conv2d(2048, 256, kernel_size=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+        )
+        self.head = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(256 * S * S, 1024),
+            nn.BatchNorm1d(1024),
+            nn.ReLU(inplace=True),
+            nn.Dropout(p=0.5),
+            nn.Linear(1024, S * S * (B * 5 + K)),
+        )
 
     def forward(self, x):
-        # TODO: backbone -> 1x1 conv -> fully connected head -> reshape to (batch, S, S, B * 5 + K)
-        raise NotImplementedError("TODO: implement the network in YOLONet.__init__ and YOLONet.forward")
+        # backbone -> 1x1 conv -> fully connected head -> grid output
+        x = self.backbone(x)
+        x = self.pool(x)
+        x = self.reduce(x)
+        x = self.head(x)
+        return x.view(x.size(0), self.S, self.S, self.B * 5 + self.K)
 
 
 # =============================================================================
@@ -142,7 +165,26 @@ class YoloLoss(nn.Module):
         #
         # The script checks your loss before training: a perfect prediction must give (almost) 0.
 
-        raise NotImplementedError("TODO: compose the loss terms in YoloLoss.forward")
+        # Coordinate and size errors are paid only by the responsible box.
+        xy_loss = (((boxes[..., 1:3] - tgt[..., 0:2]) ** 2).sum(-1) * resp).sum()
+        wh_loss = (((torch.sqrt(boxes[..., 3:5].clamp_min(1e-7))
+                 - torch.sqrt(tgt[..., 2:4].clamp_min(1e-7))) ** 2).sum(-1) * resp).sum()
+
+        # Responsible boxes should have confidence 1; all other boxes should have 0.
+        conf_obj = (((boxes[..., 0] - 1) ** 2) * resp).sum()
+        conf_noobj = ((boxes[..., 0] ** 2) * noobj).sum()
+
+        # Classification is computed only for cells containing an object.
+        cls = (((class_probs - target[..., 5:]) ** 2).sum(-1) * obj).sum()
+
+        batch_size = pred.shape[0]
+        coord = self.lambda_coord * (xy_loss + wh_loss) / batch_size
+        conf_obj = conf_obj / batch_size
+        conf_noobj = self.lambda_noobj * conf_noobj / batch_size
+        cls = cls / batch_size
+        total = coord + conf_obj + conf_noobj + cls
+        return total, {"coord": coord, "conf_obj": conf_obj,
+                   "conf_noobj": conf_noobj, "class": cls}
 
 
 # =============================================================================
