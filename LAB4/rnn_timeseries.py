@@ -50,13 +50,21 @@ class Forecaster(nn.Module):
         #         and batch_first=True  <-- don't forget it!
         #   - a nn.Linear layer that maps the last hidden state to 1 output
 
-        raise NotImplementedError("TODO: build your network in Forecaster.__init__ and Forecaster.forward")
+        #self.rnn = nn.LSTM(input_size=1, hidden_size=64, batch_first=True)
+        self.rnn = nn.GRU(input_size=1, hidden_size=128, batch_first=True)
+        self.linear = nn.Linear(128, 1)
+
 
     def forward(self, x):
         # TODO: pass x through the recurrent layer, take the output of the LAST time step
         # and pass it through the linear layer. Return a tensor of shape (batch, 1).
         # Remember that nn.LSTM returns (out, (h_n, c_n)), while nn.GRU / nn.RNN return (out, h_n).
-        raise NotImplementedError("TODO: build your network in Forecaster.__init__ and Forecaster.forward")
+
+        out, h_n = self.rnn(x)
+        last_hidden_state = h_n[-1]  # Get the last hidden state from the LSTM output
+        output = self.linear(last_hidden_state)  # Pass the last hidden state through the linear layer
+        return output
+
 
 
 # =============================================================================
