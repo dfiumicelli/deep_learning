@@ -66,7 +66,9 @@ class PatchEmbedding(nn.Module):
         #   1. apply self.proj                          -> (B, dim, H/p, W/p): a grid of patch vectors
         #   2. flatten the two spatial dimensions       -> (B, dim, N)          (hint: .flatten(2))
         #   3. swap the last two dimensions             -> (B, N, dim)          (hint: .transpose(1, 2))
-        raise NotImplementedError("TODO 1: implement PatchEmbedding.forward")
+        x = self.proj(x)
+        x = x.flatten(2)
+        return x.transpose(1, 2)
 
 
 # =============================================================================
@@ -100,13 +102,18 @@ class ViT(nn.Module):
     def embed(self, images):
         """images (B, 3, H, W) -> tokens (B, N + 1, dim): [CLS] followed by the N patch embeddings, plus positions."""
         # TODO:
-        #   1. patch embeddings with self.patch_embed                      -> (B, N, dim)
-        #   2. the [CLS] token is (1, 1, dim): repeat it for every image    -> (B, 1, dim)
-        #      (hint: self.cls_token.expand(B, -1, -1), with B = images.shape[0])
-        #   3. put it IN FRONT of the patch embeddings                      -> (B, N + 1, dim)   (hint: torch.cat(..., dim=1))
-        #   4. add the positional embeddings self.pos_embed (broadcasting over the batch)
-        #   5. apply self.dropout and return
-        raise NotImplementedError("TODO 2: implement ViT.embed")
+                #   1. patch embeddings with self.patch_embed                      -> (B, N, dim)
+                #   2. the [CLS] token is (1, 1, dim): repeat it for every image    -> (B, 1, dim)
+                #      (hint: self.cls_token.expand(B, -1, -1), with B = images.shape[0])
+                #   3. put it IN FRONT of the patch embeddings                      -> (B, N + 1, dim)   (hint: torch.cat(..., dim=1))
+                #   4. add the positional embeddings self.pos_embed (broadcasting over the batch)
+                #   5. apply self.dropout and return
+        patch_tokens = self.patch_embed(images)
+        batch_size = images.shape[0]
+        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
+        tokens = torch.cat((cls_tokens, patch_tokens), dim=1)
+        tokens = tokens + self.pos_embed
+        return self.dropout(tokens)
 
     # -------------------------------------------------------------------------
     # TODO 3: the full forward pass
@@ -118,7 +125,10 @@ class ViT(nn.Module):
         #   2. pass them through self.encoder                               -> (B, N + 1, dim)
         #   3. take the output of the [CLS] token (position 0)              -> (B, dim)
         #   4. apply self.norm and then self.head                           -> (B, n_classes)
-        raise NotImplementedError("TODO 3: implement ViT.forward")
+        tokens = self.embed(images)
+        tokens = self.encoder(tokens)
+        tokens = self.norm(tokens)
+        return self.head(tokens[:, 0])  
 
 
 # =============================================================================
