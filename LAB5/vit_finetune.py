@@ -76,24 +76,21 @@ def denormalize(images, weights):
 # =============================================================================
 # TODO: build the model
 # =============================================================================
-def build_model(weights, n_classes=10, mode="full"):
+def build_model(weights, n_classes=10, mode="linear"):
     """ViT-B/16 pretrained on ImageNet, with a new classification head for n_classes classes.
 
     weights:  the pretrained weights to load (models.ViT_B_16_Weights.DEFAULT)
     mode:     "full"   -> all the parameters stay trainable
               "linear" -> the pretrained network is frozen, only the new head is trainable
     """
-    # TODO:
-    #   1. create the ViT-B/16 with the pretrained weights            (hint: models.vit_b_16(weights=...), see
-    #                                                                  vit_tools.ipynb §9)
-    #   2. only if mode == "linear": freeze ALL its parameters         (hint: loop over model.parameters() and set
-    #                                                                  p.requires_grad = False)
-    #   3. replace the last layer, model.heads, which maps the [CLS] vector (768 numbers) to the 1000 ImageNet
-    #      classes, with a new nn.Linear from model.hidden_dim (= 768) to n_classes
-    #      (try print(model) to see the layers: the new head is just an attribute assignment, model.heads = ...)
-    #   4. return the model
-    # Question: why must step 3 come AFTER step 2?
-    raise NotImplementedError("TODO: implement build_model")
+    model = models.vit_b_16(weights=weights)
+
+    if mode == "linear":
+        for parameter in model.parameters():
+            parameter.requires_grad = False
+
+    model.heads = nn.Linear(model.hidden_dim, n_classes)
+    return model
 
 
 def new_head(model):
